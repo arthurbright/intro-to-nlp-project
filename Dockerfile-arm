@@ -1,0 +1,13 @@
+FROM python:3.10-slim-bullseye
+
+# Install PyTorch with MPS support via pip
+# This uses the standard PyPI packages which include macOS wheels, 
+# although within Docker (Linux VM) it remains experimental.
+RUN pip install torch torchvision torchaudio
+
+RUN mkdir /job
+WORKDIR /job
+VOLUME ["/job/data", "/job/src", "/job/work", "/job/output"]
+
+# You should install any dependencies you need here.
+# RUN pip install tqdm

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
+from collections import Counter
+import os
 
 
 parser = ArgumentParser()
@@ -10,8 +12,8 @@ args = parser.parse_args()
 
 
 def load_pred(fname, force_limit=None):
+    loaded = []
     with open(fname) as f:
-        loaded = []
         for line in f:
             line = line[:-1].lower()
             if force_limit is not None:
@@ -23,13 +25,21 @@ def load_pred(fname, force_limit=None):
 pred = load_pred(args.fpred, force_limit=3)
 gold = load_pred(args.fgold)
 
+flang = os.path.join(os.path.dirname(args.fgold), 'lang.txt')
+lang = load_pred(flang)
+
 if len(pred) < len(gold):
     pred.extend([''] * (len(gold) - len(pred)))
 
-correct = 0
-for i, (p, g) in enumerate(zip(pred, gold)):
+correct = Counter()
+total = Counter()
+for i, (p, g, l) in enumerate(zip(pred, gold, lang)):
     right = g in p
-    correct += right
+    correct[l] += right
+    total[l] += 1
     if args.verbose:
         print('Input {}: {}, {} is {} in {}'.format(i, 'right' if right else 'wrong', g, 'in' if right else 'not in', p))
-print('Success rate: {}'.format(correct/len(gold)))
+
+
+for k, v in correct.items():
+    print(f'Success rate for {k}: {v}/{total[k]} = {v/total[k]}')
