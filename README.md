@@ -68,7 +68,7 @@ Each line in this file corresponds to a string context, for which you must guess
 
 `data/open-dev/pred.txt` contains an example of what the output of your program must look like.
 Each line in this file correspond to guesses by the program of what the next character should be.
-In other words, line `i` in `data/open-dev/pred.txt` corresponds to what character the program thinks should come after the string in line `i` of `data/open-dev/pred.txt`.
+In other words, line `i` in `data/open-dev/pred.txt` corresponds to what character the program thinks should come after the string in line `i` of `data/open-dev/input.txt`.
 In this case, for each string, the program produces 3 guesses.
 
 
