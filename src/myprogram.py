@@ -12,9 +12,13 @@ class MyModel:
 
     @classmethod
     def load_training_data(cls):
-        # your code here
-        # this particular model doesn't train
-        return []
+        # for now, just read open dev
+        lines = []
+        with open('data/open-dev/input.txt') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                lines.append(line)
+        return lines
 
     @classmethod
     def load_test_data(cls, fname):
@@ -33,6 +37,8 @@ class MyModel:
                 f.write('{}\n'.format(p))
 
     def run_train(self, data, work_dir):
+        # run byte level BPE
+        # get n-gram probabilities
         # your code here
         pass
 
