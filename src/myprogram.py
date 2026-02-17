@@ -3,6 +3,7 @@ import os
 import string
 import random
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from better_bpe import *
 
 
 class MyModel:
@@ -17,7 +18,7 @@ class MyModel:
         with open('data/open-dev/input.txt') as f:
             for line in f:
                 line = line.rstrip('\n')
-                lines.append(line)
+                lines.append(to_bytes(line))
         return lines
 
     @classmethod
@@ -36,9 +37,12 @@ class MyModel:
             for p in preds:
                 f.write('{}\n'.format(p))
 
-    def run_train(self, data, work_dir):
+    def run_train(self, lines, work_dir):
         # run byte level BPE
+        vocab, tokens = iterative_bpe(lines, vocab_limit=300, prune_th=0.8, prune_freq=100)
+        # good vocab size: 30-50k??
         # get n-gram probabilities
+        
         # your code here
         pass
 
