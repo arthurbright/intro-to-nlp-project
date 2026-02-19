@@ -88,16 +88,24 @@ def compression_ratio(tokens, file) -> float:
     return compression_ratio, counter
 
 #########
+START = 0
+END = 1
+
+ENCODING = 'utf-8'
 
 def to_bytes(s: str):
-    return s.encode('utf-8')
+    return s.encode(ENCODING)
 
 def from_bytes(b):
-    return b.decode('utf-8')
+    return b.decode(ENCODING)
 
 def print_bytes(b):
     try:
-        print(b.decode('utf-8'))
+        print(b.decode(ENCODING))
     except:
         print(b)
 
+def pad_start(b, N):
+    for i in range(N):
+        b = START.to_bytes() + b
+    return b
