@@ -3,20 +3,20 @@ from util import *
 
 def train_ngram_model(corpus, n=3):
     """
-    corpus: iterable of sentences (bytes)
+    corpus: iterable of byte strings
     n: n-gram size
-    Returns: probs[gram size][context][next]
+    Returns: probs[gram size][context][next]  (array of defaultdict of counter)
     NOTE: gram_size = 2 means trigram.
     """
 
     counts = [defaultdict(Counter) for _ in range(n)]
     for sentence in corpus:
         for gram_size in range(n):
-            padded = sentence
+            padded = tuple(sentence)
             for i in range(gram_size):
-                padded = START.to_bytes() + padded
+                padded = (START.to_bytes(),) + padded
             for i in range(len(sentence)):
-                context = padded[i:i + gram_size]
+                context = tuple(padded[i:i + gram_size])
                 char = padded[i + gram_size]
                 counts[gram_size][context][char] += 1
     

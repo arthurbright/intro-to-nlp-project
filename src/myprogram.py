@@ -18,12 +18,15 @@ class MyModel:
 
     @classmethod
     def load_training_data(cls):
+        LIMIT = 100
         # for now, just read open dev
         lines = []
         with open('data/open-dev/input.txt') as f:
             for line in f:
                 line = line.rstrip('\n')
                 lines.append(to_bytes(line))
+        lines = lines[:LIMIT]
+        print(f"load_training_data: loaded {len(lines)} lines")
         return lines
 
     @classmethod
@@ -48,7 +51,7 @@ class MyModel:
         # get n-gram probabilities
         self.ngram_probs = train_ngram_model(tokens, n=N)
 
-    # stupid backoff
+    # stupid backoff TODO do argmax instead of sampling
     BACKOFF_WEIGHT = 0.4
     def sample_next_byte(self, byte_line):
         for gram_size in range(N - 1, -1, -1):
