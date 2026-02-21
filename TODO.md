@@ -4,6 +4,6 @@
 - token prediction instead of char prediction - what if token is not a full char?
     - sample tokens until full char??
     - argmax? for different X, go back X characters and tokenize the string. then, consider next tokens iff they contain the suffix.
-- matches are considered caseless.
+- matches are considered caseless. just convert all training data to lowercase?
 - todo: non-greedy matching?
 - tune vocab size
