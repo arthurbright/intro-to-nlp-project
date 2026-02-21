@@ -93,19 +93,39 @@ END = 1
 
 ENCODING = 'utf-8'
 
-def to_bytes(s: str):
-    return s.encode(ENCODING)
 
-def from_bytes(b):
+def bytes_to_unicode():
+    bs = list(range(ord("!"), ord("~") + 1)) + \
+         list(range(ord("¡"), ord("¬") + 1)) + \
+         list(range(ord("®"), ord("ÿ") + 1))
+
+    cs = bs[:]
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+
+    cs = [chr(c) for c in cs]
+    return dict(zip(bs, cs))
+
+BYTE_TO_CHAR = bytes_to_unicode()
+CHAR_TO_BYTE = { BYTE_TO_CHAR[b]:b for b in BYTE_TO_CHAR}
+
+
+def TO_BYTES(s: str):
+    b = s.encode(ENCODING)
+    return "".join([BYTE_TO_CHAR[byte] for byte in b])
+
+def FROM_BYTES(b):
+    s = "".join([CHAR_TO_BYTE[byte] for byte in b])
     return b.decode(ENCODING)
+
+
 
 def print_bytes(b):
     try:
         print(b.decode(ENCODING))
     except:
         print(b)
-
-def pad_start(b, N):
-    for i in range(N):
-        b = START.to_bytes() + b
-    return b

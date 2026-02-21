@@ -3,7 +3,7 @@ from util import *
 
 def train_ngram_model(corpus, n=3):
     """
-    corpus: iterable of byte strings
+    corpus: list of lists of strings
     n: n-gram size
     Returns: probs[gram size][context][next]  (array of defaultdict of counter)
     NOTE: gram_size = 2 means trigram.

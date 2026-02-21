@@ -1,5 +1,6 @@
 from better_bpe import *
 from ngram import *
+from tokenizers.pre_tokenizers import ByteLevel
 
 # text = "こg"
 # tb = to_bytes(text)
@@ -12,20 +13,42 @@ from ngram import *
 # print(from_bytes(b))
 # exit()
 
+arr = "".join([BYTE_TO_CHAR[i] for i in range(256)])
+# print(len(set(arr))
+print(TO_BYTES(' '))
+exit()
+
 lines = [to_bytes("abcabd")]
 
-# lines = []
-# with open('data/open-dev/input.txt') as f:
-#     for line in f:
-#         line = line.rstrip('\n')
-#         lines.append(to_bytes(line))
+lines = []
+with open('data/open-dev/input.txt') as f:
+    for line in f:
+        line = line.rstrip('\n')
+        lines.append(to_bytes(line))
 
 print(len(lines))
-vocab, segmented = iterative_bpe(lines, vocab_limit=257, prune_th = 0.0, prune_freq = 100)
-print(len(vocab))
-print([v for v in vocab if len(v) > 1])
+# vocab, segmented = iterative_bpe(lines, vocab_limit=257, prune_th = 0.0, prune_freq = 100)
+from tokenizers import Tokenizer, models, trainers, pre_tokenizers
 
-print(train_ngram_model(segmented, 3))
+tokenizer = Tokenizer(models.BPE())
+tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
+
+trainer = trainers.BpeTrainer(vocab_size=5_000, special_tokens=["<s>"])
+tokenizer.train(["data/open-dev/input.txt"], trainer)
+# tokenizer.save("work/tokenizer.json")
+
+vocab = tokenizer.get_vocab()
+
+# Print first 50 tokens
+for token, idx in list(vocab.items())[:50]:
+    print(idx, repr(token))
+
+print(tokenizer.encode("H H").tokens)
+
+# print(len(vocab))
+# print([v for v in vocab if len(v) > 1])
+
+# print(train_ngram_model(segmented, 3))
 exit()
 
 

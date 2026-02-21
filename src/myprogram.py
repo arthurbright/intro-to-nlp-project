@@ -6,7 +6,8 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from better_bpe import *
 from ngram import *
 import pickle
-
+from tokenizers import Tokenizer, models, trainers
+import math
 
 N = 3
 
@@ -14,18 +15,24 @@ class MyModel:
     """
     This is a starter model to get you started. Feel free to modify this file.
     """
-    ngram_probs = {}
+    @classmethod
+    def pad_start_token(cls, tokens):
+        return ["<s>" for _ in range(N - 1)] + tokens
+
+    def __init__(self, ngram_probs, tokenizer):
+        self.ngram_probs = ngram_probs
+        self.tokenizer = tokenizer
 
     @classmethod
     def load_training_data(cls):
-        LIMIT = 100
+        LIMIT = 100000
         # for now, just read open dev
         lines = []
         with open('data/open-dev/input.txt') as f:
             for line in f:
                 line = line.rstrip('\n')
-                lines.append(to_bytes(line))
-        lines = lines[:LIMIT]
+                lines.append(TO_BYTES(line))
+        # lines = lines[:LIMIT]
         print(f"load_training_data: loaded {len(lines)} lines")
         return lines
 
@@ -34,8 +41,8 @@ class MyModel:
         data = []
         with open(fname) as f:
             for line in f:
-                inp = line[:-1]  # the last character is a newline
-                data.append(to_bytes(inp))
+                inp = line.rstrip('\n')  # the last character is a newline
+                data.append(TO_BYTES(inp))
         return data
 
     @classmethod
@@ -46,70 +53,71 @@ class MyModel:
 
     def run_train(self, lines, work_dir):
         # run byte level BPE
-        vocab, tokens = iterative_bpe(lines, vocab_limit=258, prune_th=0.8, prune_freq=100)
-        # good vocab size: 30-50k??
+        tokenizer = Tokenizer(models.BPE())
+        # tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
+        print("TODO: TUNE VOCAB SIZE")
+        trainer = trainers.BpeTrainer(vocab_size=5_000)
+        tokenizer.train_from_iterator(lines, trainer)
+        self.tokenizer = tokenizer
+
         # get n-gram probabilities
-        self.ngram_probs = train_ngram_model(tokens, n=N)
+        token_lines = [tokenizer.encode(line).tokens for line in lines]
+        token_lines = [MyModel.pad_start_token(l) for l in token_lines]
+        self.ngram_probs = train_ngram_model(token_lines, n=N)
 
-    # stupid backoff TODO do argmax instead of sampling
-    BACKOFF_WEIGHT = 0.4
-    def sample_next_byte(self, byte_line):
-        for gram_size in range(N - 1, -1, -1):
-            suffix = byte_line[-gram_size:]
-            if suffix in self.ngram_probs[gram_size]:
-                choices = list(self.ngram_probs[gram_size][suffix].keys())
-                weights = list(self.ngram_probs[gram_size][suffix].values())
-                return random.choices(choices, weights=weights, k=1)[0]
-        raise "Should have returned; unigram distribution should always exist"
+    STUPID_BACKOFF = 0.4
+    
+    def score_token_sequence(self, tokens: list[str]):
+        """ Returns log probability
+        """
+        # translate to bytes
+        # tokens = self.tokenizer.decode([self.tokenizer.token_to_id(t) for t in tokens])
+        # tokens = [to_bytes(t) for t in tokens]
+        tokens = MyModel.pad_start_token(tokens)
+        n = len(tokens)
+        acc = 0.0 # log probability
+        for i in range(N - 1, n):
+            cur_token = tokens[i]
 
-    def sample_next_char(self, byte_line):
-        # assumes byte_line is already padded
-        char_bytes = []
-        b1 = self.sample_next_byte(byte_line)
-        byte_line.append(b1)
-        char_bytes.append(b1)
-        if(ENCODING == 'utf-8'):
-            if b1 < 128 + 64:
-                remaining_bytes = 1
-            elif b1 < 128 + 64 + 32:
-                remaining_bytes = 2
-            elif b1 < 128 + 64 + 32 + 16:
-                remaining_bytes = 3
-            else:
-                remaining_bytes = 4
-        else:
-            raise "UNSPECIFIED ENCODING"
-        
-        for i in range(remaining_bytes):
-            b = self.sample_next_byte(byte_line)
-            byte_line.append(b)
-            char_bytes.append(b)
+            found = False
+            for ngram_size in range(N - 1, -1, -1):
+                gram = tuple(tokens[i - ngram_size: i])
+                if (gram in self.ngram_probs[ngram_size]
+                    and cur_token in self.ngram_probs[ngram_size][gram]):
+                    acc += math.log(self.ngram_probs[ngram_size][gram][cur_token])
+                    found = True
+                    break
+                acc += math.log(self.STUPID_BACKOFF)
+            if not found:
+                # if code gets here, then the unigram is never used
+                print(f"WARNING: found token that is never used: {cur_token}")
+                return float("-inf")
+        return acc
 
-        try:
-            char = from_bytes(char_bytes)
-            return char
-        except:
-            raise f"Illegal byte sequence: {char_bytes}"
+
+
+    def run_pred_line(self, line: str):
+        n = len(line)
+        vocab = self.tokenizer.get_vocab()
+        max_likelihood = float("-inf")
+        for i in range(n + 1):
+            prefix = line[:i]
+            suffix = line[i:]
+
+            encoded_prefix = self.tokenizer.encode(prefix).tokens
+            prefix_score = self.score_token_sequence(encoded_prefix)
+            # consider all token seqs that contain suffix
+            # print(self.score_token_sequence(self.tokenizer.encode(line).tokens))
+        print(max_likelihood)
+        return ['a', 'b', 'c']
 
     def run_pred(self, data):
+        assert self.ngram_probs is not None
+        assert self.tokenizer is not None
         preds = []
         all_chars = string.ascii_letters
-        for inp in data:
-            byte_line = pad_start(inp)
-            guesses = set()
-            num_tries = 100
-            while num_tries > 0 and len(guesses) < 3:
-                num_tries -= 1
-                try:
-                    c = self.sample_next_char(byte_line.copy())
-                except Exception as e:
-                    print(f"Error sampling: {e}")
-                
-                guesses.insert(c)
-            
-            while len(guesses) < 3:
-                guesses.add(random.choice(all_chars))
-
+        for line in data:
+            guesses = self.run_pred_line(line)
             preds.append(''.join(list(guesses)))
         return preds
 
@@ -117,14 +125,16 @@ class MyModel:
         # pickle the probs dict
         with open(os.path.join(work_dir, 'model.checkpoint'), 'wb') as f:
             pickle.dump(self.ngram_probs, f)
+        self.tokenizer.save(os.path.join(work_dir, 'tokenizer.json'))
 
     @classmethod
     def load(cls, work_dir):
         # read the pickle
         with open(os.path.join(work_dir, 'model.checkpoint'), 'rb') as f:
             probs = pickle.load(f)
-        return MyModel(ngram_probs=probs)
-
+        m =  MyModel(ngram_probs=probs, 
+                    tokenizer=Tokenizer.from_file(os.path.join(work_dir, 'tokenizer.json'))) 
+        return m
 
 if __name__ == '__main__':
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -141,7 +151,7 @@ if __name__ == '__main__':
             print('Making working directory {}'.format(args.work_dir))
             os.makedirs(args.work_dir)
         print('Instatiating model')
-        model = MyModel()
+        model = MyModel(ngram_probs=None, tokenizer=None)
         print('Loading training data')
         train_data = MyModel.load_training_data()
         print('Training')
