@@ -7,3 +7,4 @@ VOLUME ["/job/data", "/job/src", "/job/work", "/job/output"]
 # RUN pip install tqdm
 RUN pip install tokenizers
 RUN pip install numpy
+RUN pip install pygtrie

@@ -119,7 +119,7 @@ def TO_BYTES(s: str):
     return "".join([BYTE_TO_CHAR[byte] for byte in b])
 
 def FROM_BYTES(b):
-    s = "".join([CHAR_TO_BYTE[byte] for byte in b])
+    b = bytes([CHAR_TO_BYTE[byte] for byte in b])
     return b.decode(ENCODING)
 
 
@@ -129,3 +129,41 @@ def print_bytes(b):
         print(b.decode(ENCODING))
     except:
         print(b)
+
+def bytes_type(c: str):
+    """ 1-4: starting byte of a char
+  
+    -x: x middle chars, followed by a start of char
+    10 + x: x middle chars
+    
+    """
+    b = CHAR_TO_BYTE[c[0]]
+    if b < 128:
+        return 1
+    if b < 128 + 64:
+        cnt = 0
+        for char in c:
+            if 128 <= CHAR_TO_BYTE[char] < 128 + 64:
+                cnt += 1
+            else:
+                return -cnt
+        return 10 + cnt
+    if b < 128 + 64 + 32:
+        return 2
+    if b < 128 + 64 + 32 + 16:
+        return 3
+    return 4
+
+def num_trailing_middle_bytes_needed(s: str):
+    acc = 0
+    for c in reversed(s):
+        t = bytes_type(c)
+        if t == 0:
+            acc -= 1
+        else:
+            return t + acc
+    raise "trailing muiddle bytes calculation: no start of char found"
+
+
+def escape_csv(line):
+    return f'"{line.replace('"', '""')}"'

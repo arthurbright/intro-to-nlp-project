@@ -2,3 +2,4 @@ output
 work
 *.py[cod]
 venv
+tmp

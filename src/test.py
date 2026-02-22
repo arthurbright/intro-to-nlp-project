@@ -1,7 +1,7 @@
 from better_bpe import *
 from ngram import *
 from tokenizers.pre_tokenizers import ByteLevel
-
+import pickle
 # text = "こg"
 # tb = to_bytes(text)
 # print(tb)
@@ -12,6 +12,35 @@ from tokenizers.pre_tokenizers import ByteLevel
 # b = bytes([128 + 64 + 32 + 4 + 2, 128 + 32 + 1, 128 + 1])
 # print(from_bytes(b))
 # exit()
+
+def comma(line):
+    return f'"{line.replace('"', '""')}"'
+with open('pred2.txt', 'w') as f2:
+    f2.write('id,prediction\n')
+    ii = 0
+    with open('tmp/33900.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            f2.write(f"{ii},{comma(line)}\n")
+            ii += 1
+    with open('tmp/52000.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            f2.write(f"{ii},{comma(line)}\n")
+            ii += 1
+    with open('tmp/56000.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            f2.write(f"{ii},{comma(line)}\n")
+            ii += 1
+    with open('tmp/FINAL.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            f2.write(f"{ii},{comma(line)}\n")
+            ii += 1
+    print(ii)
+        
+exit()
 
 arr = "".join([BYTE_TO_CHAR[i] for i in range(256)])
 # print(len(set(arr))

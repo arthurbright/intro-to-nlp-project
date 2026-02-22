@@ -8,8 +8,8 @@ from ngram import *
 import pickle
 from tokenizers import Tokenizer, models, trainers
 import math
-from collections import defaultdict, deque
-import heapq
+from collections import defaultdict
+import pygtrie
 
 N = 3
 
@@ -50,17 +50,25 @@ class MyModel:
         return data
 
     @classmethod
-    def write_pred(cls, preds, fname):
-        with open(fname, 'wt') as f:
-            for p in preds:
-                f.write('{}\n'.format(p))
+    def write_pred(cls, preds, fname, csv=False):
+        if csv:
+            with open(fname, 'wt') as f:
+                f.write("id,prediction\n")
+                ii = 0
+                for p in preds:
+                    f.write(f'{ii},{escape_csv(p)}\n')
+                    ii += 1
+        else:
+            with open(fname, 'wt') as f:
+                for p in preds:
+                    f.write('{}\n'.format(escape_csv(p)))
 
     def run_train(self, lines, work_dir):
         # run byte level BPE
         tokenizer = Tokenizer(models.BPE())
         # tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
         print("TODO: TUNE VOCAB SIZE")
-        trainer = trainers.BpeTrainer(vocab_size=5_000)
+        trainer = trainers.BpeTrainer(vocab_size=30_000)
         tokenizer.train_from_iterator(lines, trainer)
         self.tokenizer = tokenizer
 
@@ -170,9 +178,9 @@ class MyModel:
         tokens.reverse()
         return tokens, best_score
     
-    def contains_utf8_char(self, s):
+    def contains_utf8_char(self, s, ind):
         """ Return None if too short, False if invalid, char if valid"""
-        bs = [CHAR_TO_BYTE[c] for c in s]
+        bs = [CHAR_TO_BYTE[s[i]] for i in range(ind, min(ind + 4, len(s)))]
         b1 = bs[0]
         if b1 < 128 + 64:
             num_bytes = 1
@@ -191,36 +199,67 @@ class MyModel:
         except:
             return False
     
+    dfs_count = 0
+
+    def dfs(self, cur_token):
+        self.dfs_count += 1
+        # if self.dfs_count > 40_000: return
+        self._token_stack.append(cur_token)
+        # assumign utf-8 (4 bytes max)
+        token_stack_joined = "".join(self._token_stack)
+        char = self.contains_utf8_char(token_stack_joined, self._p)
+        if char is not None: 
+            if not (char == False):
+                self._probs[char] += math.exp(self.score_last_tokens(self._prev_tokens, self._token_stack))
+            # terminate
+            self._token_stack.pop()
+            return
+        
+        # selectively dfs based on start of char
+        needed = num_trailing_middle_bytes_needed(token_stack_joined)
+        assert needed > 0
+        # only consider tokens that follow
+        if (cur_token,) in self.ngram_probs[1]:
+            for next_token in self.ngram_probs[1][(cur_token,)]:
+                self.dfs(next_token)
+
+        # old approach: only consider legal tokens according to utf-8
+        # for i in range(1, min(needed, self.max_type) + 1):
+        #     for next_token in self.vocab_classes[i + 10]:
+        #         self.dfs(next_token)
+        # for next_token in self.vocab_classes[-needed]:
+        #     self.dfs(next_token)
+
+        self._token_stack.pop()
+        return
+
+    
     # Find next char distribution given prefix
     def sum_over_next_chars(self, tokens: list[str], prefix: str):
         """ Tokens is UNPADDED"""
-        vocab = self.tokenizer.get_vocab().keys()
         probs = defaultdict(float)
         p = len(prefix)
         tokens = self.pad_start_token(tokens)
-        
-        for first_token in vocab:
-            if not first_token[:-1].startswith(prefix): continue
-            # DFS
-            token_stack = []
-            todo = deque()
-            todo.append(first_token)
 
-            while len(todo) > 0:
-                cur_token = todo.popleft()
-                if len(token_stack) == 4: continue
-                token_stack.append(cur_token)
-                # assumign utf-8 (4 bytes max)
-                char = self.contains_utf8_char("".join(token_stack)[p:])
-                if char is not None: 
-                    if not (char == False):
-                        probs[char] += math.exp(self.score_last_tokens(tokens, token_stack))
-                    # terminate
-                    continue
-                for next_token in vocab:
-                    todo.append(next_token)
-                token_stack.pop()
-        
+        if len(prefix) == 0:
+            matching_tokens = self.char_starts
+        else:
+            try:
+                matching_tokens = list(self.vocab_trie.keys(prefix=prefix))
+            except:
+                # no matching prefix
+                return probs
+
+
+        for first_token in matching_tokens:
+            if len(first_token) <= p: continue
+            ty = bytes_type(first_token[p])
+            if ty <= 0 or ty >= 10: continue # must be a start of char byte
+            self._token_stack = []
+            self._prev_tokens = tokens
+            self._probs = probs
+            self._p = p
+            self.dfs(first_token)
         return probs
 
 
@@ -235,7 +274,9 @@ class MyModel:
 
             # naive encoding. Optimal score encoding is commented out below.
             encoded_prefix = self.tokenizer.encode(prefix).tokens
-            prefix_score = math.exp(self.score_token_sequence(encoded_prefix))
+            prefix_score = self.score_token_sequence(encoded_prefix)
+            if math.isinf(prefix_score): continue
+            prefix_score = math.exp(prefix_score)
             # encoded_prefix, prefix_score  = self.best_tokenization(prefix, N, self.score_gram)
             # if encoded_prefix is not None:
 
@@ -245,17 +286,33 @@ class MyModel:
                 probs[char] += prefix_score * p
 
         top3 = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
-        print(f"Prediction: {top3}")
         return [pair[0] for pair in top3]
 
     def run_pred(self, data):
         assert self.ngram_probs is not None
         assert self.tokenizer is not None
         preds = []
-        all_chars = string.ascii_letters
+        data = data[56000:]
+        print(len(data))
+        ii = 56000
         for line in data:
             guesses = self.run_pred_line(line)
+            if ii % 200 == 0:
+                print(f"Prediction {ii}: {guesses}")
+            # print(self.dfs_count)
+            self.dfs_count = 0
+
+            if len(guesses) < 3:
+                print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
+                guesses = ['a', 'b', 'c']
             preds.append(''.join(list(guesses)))
+            ii += 1
+
+            if ii % 4000 == 0:
+                with open(f"tmp/{ii}.pickle", 'wb') as f:
+                    pickle.dump(preds, f)
+        with open(f"tmp/FINAL.pickle", 'wb') as f:
+                    pickle.dump(preds, f)
         return preds
 
     def save(self, work_dir):
@@ -270,7 +327,27 @@ class MyModel:
         with open(os.path.join(work_dir, 'model.checkpoint'), 'rb') as f:
             probs = pickle.load(f)
         m =  MyModel(ngram_probs=probs, 
-                    tokenizer=Tokenizer.from_file(os.path.join(work_dir, 'tokenizer.json'))) 
+                    tokenizer=Tokenizer.from_file(os.path.join(work_dir, 'tokenizer.json')))
+        
+        # precompute token vocab
+        m.vocab = set(m.tokenizer.get_vocab().keys())
+        m.vocab_classes = defaultdict(set)
+        m.max_type = 0
+        m.char_starts = []
+        for v in m.vocab:
+            ty = bytes_type(v)
+            m.vocab_classes[ty].add(v)
+            m.max_type = max(m.max_type, ty)
+            if 1 <= ty <= 4:
+                m.char_starts.append(v)
+        for k in m.vocab_classes:
+            print(k, len(m.vocab_classes[k]))
+
+        # trie for fast prefix lookup
+        m.vocab_trie = pygtrie.CharTrie()
+        for v in m.vocab:
+            m.vocab_trie[v] = True
+
         return m
 
 if __name__ == '__main__':
@@ -304,6 +381,6 @@ if __name__ == '__main__':
         pred = model.run_pred(test_data)
         print('Writing predictions to {}'.format(args.test_output))
         assert len(pred) == len(test_data), 'Expected {} predictions but got {}'.format(len(test_data), len(pred))
-        model.write_pred(pred, args.test_output)
+        model.write_pred(pred, args.test_output, csv=True)
     else:
         raise NotImplementedError('Unknown mode {}'.format(args.mode))
