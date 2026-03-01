@@ -11,7 +11,7 @@ import math
 from collections import defaultdict
 import pygtrie
 
-N = 3
+N = 4
 
 class MyModel:
     """
@@ -33,11 +33,18 @@ class MyModel:
     @classmethod
     def load_training_data(cls):
         LIMIT = 100000
-        # for now, just read open dev
+        # open dev
         lines = []
         with open('data/open-dev/input.txt') as f:
             for line in f:
                 lines.append(cls.preprocess_data(line))
+        # public half of test set
+        with open('data/open-dev/test.txt') as f:
+            for line in f:
+                lines.append(cls.preprocess_data(line))
+
+        # huggingface wikipedia datasets
+        
         print(f"load_training_data: loaded {len(lines)} lines")
         return lines
 
@@ -77,17 +84,23 @@ class MyModel:
         token_lines = [MyModel.pad_start_token(l) for l in token_lines]
         self.ngram_probs = train_ngram_model(token_lines, n=N)
 
-    STUPID_BACKOFF = 0.4
+    STUPID_BACKOFF_LOG = math.log(0.4) # LOG lambda
 
     def score_gram(self, context, token):
         assert len(context) == N - 1
+        context = tuple(context)
         acc = 0
         for ngram_size in range(N - 1, -1, -1):
-            gram = tuple(context[N - 1 - ngram_size:])
-            if (gram in self.ngram_probs[ngram_size]
-                and token in self.ngram_probs[ngram_size][gram]):
-                return acc + math.log(self.ngram_probs[ngram_size][gram][token])
-            acc += math.log(self.STUPID_BACKOFF)
+            gram = context[N - 1 - ngram_size:]
+            _d = self.ngram_probs_log[ngram_size].get(gram)
+            if _d:
+                _d2 = _d.get(token)
+                if _d2:
+                    return acc + _d2
+            # if (gram in self.ngram_probs[ngram_size]
+            #     and token in self.ngram_probs[ngram_size][gram]):
+            #     return acc + math.log(self.ngram_probs[ngram_size][gram][token])
+            acc += self.STUPID_BACKOFF_LOG
         
         # if code gets here, then the unigram is never used
         # print(f"WARNING: found token that is never used: {token}")
@@ -95,10 +108,12 @@ class MyModel:
     
     def score_last_tokens(self, tokens, tokens2):
         acc = 0.0
-        tokens3 = tokens + tokens2
+        context = list(tokens[-(N-1):])
         k = len(tokens)
-        for i in range(len(tokens2)):
-            acc += self.score_gram(tokens3[(k + i) - (N - 1):k + i], tokens2[i])
+        for token in tokens2:
+            acc += self.score_gram(context, token)
+            context.pop(0)
+            context.append(token)
         return acc
         
     def score_token_sequence(self, tokens: list[str]):
@@ -203,7 +218,6 @@ class MyModel:
 
     def dfs(self, cur_token):
         self.dfs_count += 1
-        # if self.dfs_count > 40_000: return
         self._token_stack.append(cur_token)
         # assumign utf-8 (4 bytes max)
         token_stack_joined = "".join(self._token_stack)
@@ -211,24 +225,15 @@ class MyModel:
         if char is not None: 
             if not (char == False):
                 self._probs[char] += math.exp(self.score_last_tokens(self._prev_tokens, self._token_stack))
+                pass
             # terminate
             self._token_stack.pop()
             return
         
-        # selectively dfs based on start of char
-        needed = num_trailing_middle_bytes_needed(token_stack_joined)
-        assert needed > 0
         # only consider tokens that follow
         if (cur_token,) in self.ngram_probs[1]:
             for next_token in self.ngram_probs[1][(cur_token,)]:
                 self.dfs(next_token)
-
-        # old approach: only consider legal tokens according to utf-8
-        # for i in range(1, min(needed, self.max_type) + 1):
-        #     for next_token in self.vocab_classes[i + 10]:
-        #         self.dfs(next_token)
-        # for next_token in self.vocab_classes[-needed]:
-        #     self.dfs(next_token)
 
         self._token_stack.pop()
         return
@@ -252,6 +257,7 @@ class MyModel:
 
 
         for first_token in matching_tokens:
+            if (tokens[-1],) not in self.ngram_probs[1] or first_token not in self.ngram_probs[1][(tokens[-1],)]: continue
             if len(first_token) <= p: continue
             ty = bytes_type(first_token[p])
             if ty <= 0 or ty >= 10: continue # must be a start of char byte
@@ -268,7 +274,7 @@ class MyModel:
         n = len(line)
         probs = defaultdict(float)
 
-        for i in range(n + 1):
+        for i in range(n, n + 1):
             prefix = line[:i]
             suffix = line[i:]
 
@@ -291,22 +297,39 @@ class MyModel:
     def run_pred(self, data):
         assert self.ngram_probs is not None
         assert self.tokenizer is not None
+        empty_guesses = 0
         preds = []
-        data = data[56000:]
         print(len(data))
-        ii = 56000
+        ii = 0
         for line in data:
-            guesses = self.run_pred_line(line)
+            _line = line
+            final_guesses = self.run_pred_line(_line)
+            truncated = False
+            while len(final_guesses) < 3:
+                # if no valid guesses, keep shortening line
+                _line = _line[1:]
+                guesses = self.run_pred_line(_line)
+                for k in guesses:
+                    if k not in final_guesses:
+                        final_guesses.append(k)
+                truncated = True
+                
+
+            final_guesses = final_guesses[:3]
+
             if ii % 200 == 0:
-                print(f"Prediction {ii}: {guesses}")
+                print(f"Prediction {ii}: {final_guesses}. Truncated guesses so far: {empty_guesses}")
             # print(self.dfs_count)
             self.dfs_count = 0
 
-            if len(guesses) < 3:
-                print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
-                guesses = ['a', 'b', 'c']
-            preds.append(''.join(list(guesses)))
+            if truncated:
+                # print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
+                empty_guesses += 1
+            preds.append(''.join(list(final_guesses)))
             ii += 1
+
+            if len(final_guesses) < 3:
+                raise f"EMPTY GUESSES {FROM_BYTES(line)}, {final_guesses}"
 
             if ii % 4000 == 0:
                 with open(f"tmp/{ii}.pickle", 'wb') as f:
@@ -347,6 +370,14 @@ class MyModel:
         m.vocab_trie = pygtrie.CharTrie()
         for v in m.vocab:
             m.vocab_trie[v] = True
+
+        # get n_gram_probs logged
+        def log_dict(d):
+            new_d = {}
+            for k, v in d.items():
+                new_d[k] = {kk: math.log(vv) for kk, vv in v.items()}
+            return new_d
+        m.ngram_probs_log = [log_dict(d) for d in m.ngram_probs]
 
         return m
 

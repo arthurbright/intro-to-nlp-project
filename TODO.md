@@ -37,3 +37,15 @@ EMPTY GUESSES: 호라이즌 스캐너 점
 EMPTY GUESSES: यह कहता है कि गेंद पर माइनस 10° नीचे है। मुझे लगता है कि यह क
 EMPTY GUESSES: यह कहता है कि गेंद पर माइनस 10° नीचे है। मुझे लगता है कि यह कक्षा दर है, ह
 i've been advised from the cape you might put your prop switch off 
+
+
+Success rate for en: 38/9996 = 0.0038015206082432974
+Success rate for ru: 44/9994 = 0.004402641584950971
+Success rate for zh: 78/9879 = 0.007895535985423625
+Success rate for ja: 73/9958 = 0.007330789315123519
+Success rate for hi: 24/9994 = 0.0024014408645187113
+Success rate for ar: 41/9992 = 0.004103282626100881
+Success rate for ko: 66/9972 = 0.006618531889290012
+Success rate for fr: 36/9988 = 0.003604325190228274
+Success rate for de: 42/9992 = 0.004203362690152122
+Success rate for it: 44/9992 = 0.004403522818254604

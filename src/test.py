@@ -13,6 +13,18 @@ import pickle
 # print(from_bytes(b))
 # exit()
 
+with open('pred2.txt', 'w') as f2:
+    # f2.write('id,prediction\n')
+    ii = 0
+    with open('tmp/FINAL.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            f2.write(f'{line}\n')
+            ii += 1
+
+
+exit()
+
 def comma(line):
     return f'"{line.replace('"', '""')}"'
 with open('pred2.txt', 'w') as f2:

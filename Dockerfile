@@ -8,3 +8,4 @@ VOLUME ["/job/data", "/job/src", "/job/work", "/job/output"]
 RUN pip install tokenizers
 RUN pip install numpy
 RUN pip install pygtrie
+RUN pip install datasets

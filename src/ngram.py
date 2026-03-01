@@ -5,7 +5,7 @@ def train_ngram_model(corpus, n=3):
     """
     corpus: list of lists of strings
     n: n-gram size
-    Returns: probs[gram size][context][next]  (array of defaultdict of counter)
+    Returns: probs[gram size][context][next]  (array of dict of dict)
     NOTE: gram_size = 2 means trigram.
     """
 
