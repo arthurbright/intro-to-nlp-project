@@ -68,7 +68,7 @@ class MyModel:
         tokenizer = Tokenizer(models.BPE())
         # tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
         print("TODO: TUNE VOCAB SIZE")
-        trainer = trainers.BpeTrainer(vocab_size=30_000)
+        trainer = trainers.BpeTrainer(vocab_size=10_000)
         tokenizer.train_from_iterator(lines, trainer)
         self.tokenizer = tokenizer
 
@@ -250,9 +250,10 @@ class MyModel:
                 # no matching prefix
                 return probs
 
-
+        last_token = tokens[-1]
         for first_token in matching_tokens:
             if len(first_token) <= p: continue
+            if (last_token,) not in self.ngram_probs[1] or first_token not in self.ngram_probs[1][(last_token, )]: continue
             ty = bytes_type(first_token[p])
             if ty <= 0 or ty >= 10: continue # must be a start of char byte
             self._token_stack = []
@@ -284,7 +285,6 @@ class MyModel:
             suffix_probs = self.sum_over_next_chars(encoded_prefix, suffix)
             for char, p in suffix_probs.items():
                 probs[char] += prefix_score * p
-
         top3 = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
         return [pair[0] for pair in top3]
 
@@ -292,19 +292,21 @@ class MyModel:
         assert self.ngram_probs is not None
         assert self.tokenizer is not None
         preds = []
-        data = data[56000:]
         print(len(data))
-        ii = 56000
+        ii = 0
+        empty_guesses = 0
         for line in data:
             guesses = self.run_pred_line(line)
             if ii % 200 == 0:
-                print(f"Prediction {ii}: {guesses}")
+                print(f"Prediction {ii}: {guesses}, Truncated: {empty_guesses}")
             # print(self.dfs_count)
             self.dfs_count = 0
 
             if len(guesses) < 3:
-                print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
-                guesses = ['a', 'b', 'c']
+                # print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
+                empty_guesses += 1
+                guesses.extend(['e', 'a', 'r'])
+                guesses = guesses[:3]
             preds.append(''.join(list(guesses)))
             ii += 1
 

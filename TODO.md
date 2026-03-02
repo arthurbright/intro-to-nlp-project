@@ -8,6 +8,12 @@
     - maybe more data 
     - instead of encoding entire prefix, just try last few chars?
 
+5-gram 50k: 0.58
+5-gram 15k: 0.675
+4-gram 30k: 0.674
+3-gram: 0.7?? or 0.63
+
+
 3 1991
 1 2909
 2 846
