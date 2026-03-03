@@ -9,6 +9,26 @@ import pickle
 # print(t2)
 # exit()
 
+
+# from transformers import AutoTokenizer
+# tokenizer = AutoTokenizer.from_pretrained("gpt2")
+# print(tokenizer.tokenize('hello abcdefg'))
+
+# exit()
+
+with open('pred2.txt', 'w') as f2:
+    # f2.write('id,prediction\n')
+    ii = 0
+    with open('tmp/5000.pickle', 'rb') as f:
+        lines = pickle.load(f)
+        for line in lines:
+            # f2.write(f"{ii},{comma(line)}\n")
+            f2.write(f"{line}\n")
+            ii += 1
+
+
+exit()
+
 # b = bytes([128 + 64 + 32 + 4 + 2, 128 + 32 + 1, 128 + 1])
 # print(from_bytes(b))
 # exit()

@@ -10,8 +10,14 @@ from tokenizers import Tokenizer, models, trainers
 import math
 from collections import defaultdict
 import pygtrie
+from huggingface import *
+from transformers import AutoTokenizer
 
-N = 3
+
+N = 4
+CHAR_WISE = False
+VOCAB_SIZE = 20_000
+USE_GPT_TOKENIZER = False
 
 class MyModel:
     """
@@ -28,18 +34,43 @@ class MyModel:
     @classmethod
     def preprocess_data(cls, line):
         line = line.rstrip('\n').lower()
-        return TO_BYTES(line)
+        if not CHAR_WISE: return TO_BYTES(line)
+        return line
 
     @classmethod
     def load_training_data(cls):
-        LIMIT = 100000
-        # for now, just read open dev
+        # open dev
         lines = []
         with open('data/open-dev/input.txt') as f:
             for line in f:
                 lines.append(cls.preprocess_data(line))
-        print(f"load_training_data: loaded {len(lines)} lines")
-        return lines
+        # first half of test
+        with open('data/test.txt') as f:
+            for line in f:
+                lines.append(cls.preprocess_data(line))
+
+        # open dev contains approx 4 million chars
+        # 6 million from open dev + test
+
+        langs = ['en', 'ru', 'zh', 'ja', 'hi', 'ar', 'ko', 'fr', 'de', 'it']
+        wiki_lines = []
+        for lang in langs:
+            _lines = download_dataset(("wikimedia/wikipedia", f"20231101.{lang}"), "text", 1_000_000)
+            wiki_lines.extend([cls.preprocess_data(l) for l in _lines])
+
+        total_chars = sum([len(l) for l in lines])
+
+        # prefix deduplication - increase variance
+        lines = remove_prefixes(lines)
+        lines = lines * 2
+
+        wiki_lines = remove_prefixes(wiki_lines)
+        
+        print(f"load_training_data: loaded {total_chars} chars")
+        print(f"After prefix dedupe and upsample: {sum([len(l) for l in lines])} chars")
+        print(f"Added from wiki: {sum([len(w) for w in wiki_lines])} chars")
+
+        return lines + wiki_lines
 
     @classmethod
     def load_test_data(cls, fname):
@@ -61,21 +92,29 @@ class MyModel:
         else:
             with open(fname, 'wt') as f:
                 for p in preds:
-                    f.write('{}\n'.format(escape_csv(p)))
+                    f.write('{}\n'.format(p))
 
     def run_train(self, lines, work_dir):
-        # run byte level BPE
-        tokenizer = Tokenizer(models.BPE())
-        # tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
-        print("TODO: TUNE VOCAB SIZE")
-        trainer = trainers.BpeTrainer(vocab_size=10_000)
-        tokenizer.train_from_iterator(lines, trainer)
-        self.tokenizer = tokenizer
+        if not USE_GPT_TOKENIZER:
+            # run byte level BPE
+            tokenizer = Tokenizer(models.BPE())
+            # tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
+            print("TODO: TUNE VOCAB SIZE")
+            trainer = trainers.BpeTrainer(vocab_size=VOCAB_SIZE)
+            tokenizer.train_from_iterator(lines, trainer)
+            self.tokenizer = tokenizer
 
-        # get n-gram probabilities
-        token_lines = [tokenizer.encode(line).tokens for line in lines]
-        token_lines = [MyModel.pad_start_token(l) for l in token_lines]
-        self.ngram_probs = train_ngram_model(token_lines, n=N)
+            # get n-gram probabilities
+            token_lines = [tokenizer.encode(line).tokens for line in lines]
+            token_lines = [MyModel.pad_start_token(l) for l in token_lines]
+            self.ngram_probs = train_ngram_model(token_lines, n=N)
+        else:
+            tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            self.tokenizer = tokenizer
+            token_lines = [tokenizer.tokenize(line) for line in lines]
+            token_lines = [MyModel.pad_start_token(l) for l in token_lines]
+            self.ngram_probs = train_ngram_model(token_lines, n=N)
+
 
     STUPID_BACKOFF = 0.4
 
@@ -179,6 +218,8 @@ class MyModel:
         return tokens, best_score
     
     def contains_utf8_char(self, s, ind):
+        if CHAR_WISE and not USE_GPT_TOKENIZER:
+            return s[ind]
         """ Return None if too short, False if invalid, char if valid"""
         bs = [CHAR_TO_BYTE[s[i]] for i in range(ind, min(ind + 4, len(s)))]
         b1 = bs[0]
@@ -215,20 +256,10 @@ class MyModel:
             self._token_stack.pop()
             return
         
-        # selectively dfs based on start of char
-        needed = num_trailing_middle_bytes_needed(token_stack_joined)
-        assert needed > 0
         # only consider tokens that follow
         if (cur_token,) in self.ngram_probs[1]:
             for next_token in self.ngram_probs[1][(cur_token,)]:
                 self.dfs(next_token)
-
-        # old approach: only consider legal tokens according to utf-8
-        # for i in range(1, min(needed, self.max_type) + 1):
-        #     for next_token in self.vocab_classes[i + 10]:
-        #         self.dfs(next_token)
-        # for next_token in self.vocab_classes[-needed]:
-        #     self.dfs(next_token)
 
         self._token_stack.pop()
         return
@@ -242,20 +273,20 @@ class MyModel:
         tokens = self.pad_start_token(tokens)
 
         if len(prefix) == 0:
-            matching_tokens = self.char_starts
+            matching_tokens = self.vocab
         else:
             try:
-                matching_tokens = list(self.vocab_trie.keys(prefix=prefix))
+                matching_tokens = set(self.vocab_trie.keys(prefix=prefix))
             except:
                 # no matching prefix
                 return probs
-
         last_token = tokens[-1]
-        for first_token in matching_tokens:
+        if (last_token,) not in self.ngram_probs[1]: return probs
+        for first_token in self.ngram_probs[1][(last_token, )]:
             if len(first_token) <= p: continue
-            if (last_token,) not in self.ngram_probs[1] or first_token not in self.ngram_probs[1][(last_token, )]: continue
-            ty = bytes_type(first_token[p])
-            if ty <= 0 or ty >= 10: continue # must be a start of char byte
+            if first_token not in matching_tokens: continue
+            # ty = bytes_type(first_token[p])
+            # if ty <= 0 or ty >= 10: continue # must be a start of char byte
             self._token_stack = []
             self._prev_tokens = tokens
             self._probs = probs
@@ -273,8 +304,11 @@ class MyModel:
             prefix = line[:i]
             suffix = line[i:]
 
-            # naive encoding. Optimal score encoding is commented out below.
-            encoded_prefix = self.tokenizer.encode(prefix).tokens
+            if USE_GPT_TOKENIZER:
+                encoded_prefix = self.tokenizer.tokenize(prefix)
+            else: 
+                encoded_prefix = self.tokenizer.encode(prefix).tokens
+
             prefix_score = self.score_token_sequence(encoded_prefix)
             if math.isinf(prefix_score): continue
             prefix_score = math.exp(prefix_score)
@@ -283,8 +317,9 @@ class MyModel:
 
             # consider all tokens that STRICTLY contain suffix
             suffix_probs = self.sum_over_next_chars(encoded_prefix, suffix)
-            for char, p in suffix_probs.items():
-                probs[char] += prefix_score * p
+            if prefix_score != 0:
+                for char, p in suffix_probs.items():
+                    probs[char] += prefix_score * p
         top3 = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
         return [pair[0] for pair in top3]
 
@@ -296,13 +331,24 @@ class MyModel:
         ii = 0
         empty_guesses = 0
         for line in data:
+            _line = line
             guesses = self.run_pred_line(line)
-            if ii % 200 == 0:
+            truncated = False
+            while len(guesses) < 3:
+                truncated = True
+                _line = _line[min(len(line), 10):] ## TODO: this only try every 10 chars
+                _guesses = self.run_pred_line(_line)
+                for g in _guesses:
+                    if g not in guesses:
+                        guesses.append(g)
+                if len(_line) == 0: break
+
+            if ii % 1 == 0:
                 print(f"Prediction {ii}: {guesses}, Truncated: {empty_guesses}")
             # print(self.dfs_count)
             self.dfs_count = 0
 
-            if len(guesses) < 3:
+            if truncated:
                 # print(f"EMPTY GUESSES: {FROM_BYTES(line)}")
                 empty_guesses += 1
                 guesses.extend(['e', 'a', 'r'])
@@ -310,10 +356,10 @@ class MyModel:
             preds.append(''.join(list(guesses)))
             ii += 1
 
-            if ii % 4000 == 0:
+            if ii % 5000 == 0:
                 with open(f"tmp/{ii}.pickle", 'wb') as f:
                     pickle.dump(preds, f)
-        with open(f"tmp/FINAL.pickle", 'wb') as f:
+        with open(f"tmp/FINAL_wiki.pickle", 'wb') as f:
                     pickle.dump(preds, f)
         return preds
 
@@ -321,7 +367,8 @@ class MyModel:
         # pickle the probs dict
         with open(os.path.join(work_dir, 'model.checkpoint'), 'wb') as f:
             pickle.dump(self.ngram_probs, f)
-        self.tokenizer.save(os.path.join(work_dir, 'tokenizer.json'))
+        if not USE_GPT_TOKENIZER:
+            self.tokenizer.save(os.path.join(work_dir, 'tokenizer.json'))
 
     @classmethod
     def load(cls, work_dir):
@@ -330,20 +377,22 @@ class MyModel:
             probs = pickle.load(f)
         m =  MyModel(ngram_probs=probs, 
                     tokenizer=Tokenizer.from_file(os.path.join(work_dir, 'tokenizer.json')))
-        
+        if USE_GPT_TOKENIZER:
+            m.tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
         # precompute token vocab
         m.vocab = set(m.tokenizer.get_vocab().keys())
-        m.vocab_classes = defaultdict(set)
-        m.max_type = 0
-        m.char_starts = []
-        for v in m.vocab:
-            ty = bytes_type(v)
-            m.vocab_classes[ty].add(v)
-            m.max_type = max(m.max_type, ty)
-            if 1 <= ty <= 4:
-                m.char_starts.append(v)
-        for k in m.vocab_classes:
-            print(k, len(m.vocab_classes[k]))
+        # m.vocab_classes = defaultdict(set)
+        # m.max_type = 0
+        # m.char_starts = []
+        # for v in m.vocab:
+        #     ty = bytes_type(v)
+        #     m.vocab_classes[ty].add(v)
+        #     m.max_type = max(m.max_type, ty)
+        #     if 1 <= ty <= 4:
+        #         m.char_starts.append(v)
+        # for k in m.vocab_classes:
+        #     print(k, len(m.vocab_classes[k]))
 
         # trie for fast prefix lookup
         m.vocab_trie = pygtrie.CharTrie()

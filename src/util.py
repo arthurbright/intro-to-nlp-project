@@ -167,3 +167,30 @@ def num_trailing_middle_bytes_needed(s: str):
 
 def escape_csv(line):
     return f'"{line.replace('"', '""')}"'
+
+
+
+def remove_prefixes(strings):
+    if not strings:
+        return []
+
+    strings_sorted = sorted(strings)
+    result = []
+
+    for i in range(len(strings_sorted) - 1):
+        current = strings_sorted[i]
+        nxt = strings_sorted[i + 1]
+
+        # If current is NOT a prefix of the next string, keep it
+        if not nxt.startswith(current):
+            result.append(current)
+
+    # Always keep the last string (nothing after it)
+    result.append(strings_sorted[-1])
+
+    return result
+
+import unicodedata
+def normalize(text):
+    text = unicodedata.normalize("NFC", text)
+    return text

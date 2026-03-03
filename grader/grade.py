@@ -40,6 +40,11 @@ for i, (p, g, l) in enumerate(zip(pred, gold, lang)):
     if args.verbose:
         print('Input {}: {}, {} is {} in {}'.format(i, 'right' if right else 'wrong', g, 'in' if right else 'not in', p))
 
-
+_t = 0
+_tt = 0
 for k, v in correct.items():
     print(f'Success rate for {k}: {v}/{total[k]} = {v/total[k]}')
+    _t += v
+    _tt += total[k]
+
+print(f'Overall Success Rate: {_t/_tt}')
