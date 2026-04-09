@@ -4,6 +4,25 @@
 - try n = 5
 - language identification?
 
+.\.venv\Scripts\Activate.ps1
+python src/myprogram.py train --work_dir work
+python src/myprogram.py test --work_dir work --test_data data/open-dev/input.txt --test_output pred.txt
+python grader/grade.py pred.txt.flat data/open-dev/answer.txt --verbose  
+
+multiprocess: 4 workers: 0.064, 0.079
+8 workers:  0.076
+batching: 0.018
+batching, 1 proc with pool: 0.011
+batching, 1 proc no pool: 0.009
+batching, 512 batch: 0.005
+
+1_000_000, 20 epochs: 0.578
+
+TODO:
+- filter space-related wikipedia
+- tune hyperparameters (num layers, epochs)
+
+
 
 5-gram 50k: 0.58
 5-gram 15k: 0.675

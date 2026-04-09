@@ -166,7 +166,8 @@ def num_trailing_middle_bytes_needed(s: str):
 
 
 def escape_csv(line):
-    return f'"{line.replace('"', '""')}"'
+    temp = line.replace("\"", "\"\"")
+    return f'"{temp}"'
 
 
 

@@ -10,3 +10,4 @@ RUN pip install numpy
 RUN pip install pygtrie
 RUN pip install datasets
 RUN pip install transformers
+RUN pip install torch

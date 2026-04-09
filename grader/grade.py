@@ -13,7 +13,8 @@ args = parser.parse_args()
 
 def load_pred(fname, force_limit=None):
     loaded = []
-    with open(fname) as f:
+    # TODO changed encoding
+    with open(fname, 'r', encoding='utf-8') as f:
         for line in f:
             line = line[:-1].lower()
             if force_limit is not None:
