@@ -44,9 +44,32 @@ class MyModel:
 
     @classmethod
     def load_training_data(cls):
-        # TODO 
-        # open dev
+        # filtered data
         lines = []
+        lang_count = defaultdict(int)
+        char_count = defaultdict(int)
+        # with open('multilingual_space.txt', 'r', encoding='utf-8') as f:
+        #     for line in f:
+        #         lang = line[0:2]
+        #         lines.append(line[3:])
+        #         lang_count[lang] += 1
+        #         char_count[lang] += len(line) - 3
+
+        # lines = [cls.preprocess_data(line) for line in lines]
+        # print(lang_count)
+        # print(char_count)
+        # return lines
+        # TODO: compensate languages with general wiki?
+
+
+        # preloaded 10mil hugging face wiki
+        with open('train_data_1mil.pickle', 'rb') as f:
+            lines = pickle.load(f)
+            print("lines: ", len(lines))
+            lines = [cls.preprocess_data(line) for line in lines]
+            return lines
+
+        # open dev
         # with open('data/open-dev/input.txt', "r", encoding="utf-8") as f:
         #     for line in f:
         #         lines.append(cls.preprocess_data(line))
@@ -58,10 +81,12 @@ class MyModel:
         # open dev contains approx 4 million chars
         # 6 million from open dev + test
 
-        langs = ['en', 'ru', 'zh', 'ja', 'hi', 'ar', 'ko', 'fr', 'de', 'it']
+        langs = {'en': 1, 'ru': 1, 
+                 'zh': 3, 'ja': 2, 'hi': 1, 'ar': 1, 'ko': 2, 'fr': 1, 'de': 1, 'it': 1}
         wiki_lines = []
+        MAX_CHAR_COUNT = 10_000_000
         for lang in langs:
-            _lines = download_dataset(("wikimedia/wikipedia", f"20231101.{lang}"), "text", 1_000_000) #og: 1_000_000
+            _lines = download_dataset(("wikimedia/wikipedia", f"20231101.{lang}"), "text",  max(MAX_CHAR_COUNT - char_count[lang], 0)) #og: 1_000_000
             wiki_lines.extend([cls.preprocess_data(l) for l in _lines])
 
         total_chars = sum([len(l) for l in lines])
@@ -107,7 +132,7 @@ class MyModel:
     def run_train(self, lines, work_dir):
         dataset = SentenceCharDataset(lines)
         self.model = CharLSTM(dataset.vocab_size)
-        my_train(self.model, dataset, epochs=30)
+        my_train(self.model, dataset, epochs=60)
 
         print("VOCAB_SIZE:", dataset.vocab_size)
         params = {"vocab_size": dataset.vocab_size,

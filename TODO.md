@@ -17,10 +17,48 @@ batching, 1 proc no pool: 0.009
 batching, 512 batch: 0.005
 
 1_000_000, 20 epochs: 0.578
+work-50: 10 million chars per language, 50 epochs, 3 layers - 0.4
+10 mil chars per lang, 30 epochs, 2 layers, hidden 512 - 0.55
+1mil, 50 epoch, 2 layer, hidden 512, dropoiut - 0.64
+10mil, ^^, droput - 0.56
+filtered data, 60 epoch - 0.411 ;(
+    Success rate for en: 6186/9996 = 0.6188475390156063
+    Success rate for ru: 5527/9994 = 0.5530318190914548
+    Success rate for zh: 1643/9879 = 0.16631237979552585
+    Success rate for ja: 2810/9958 = 0.28218517774653545
+    Success rate for hi: 751/9994 = 0.07514508705223134
+    Success rate for ar: 4915/9992 = 0.49189351481184945
+    Success rate for ko: 1395/9972 = 0.13989169675090252
+    Success rate for fr: 6354/9988 = 0.6361633960752904
+    Success rate for de: 5583/9992 = 0.5587469975980784
+    Success rate for it: 5864/9992 = 0.5868694955964772
+    Overall Success Rate: 0.411279408963782
+filtered data (compensated) (work-filter-equal), 60 epoch: 0.609
+    Success rate for en: 6794/9996 = 0.679671868747499
+    Success rate for ru: 6543/9994 = 0.6546928156894136
+    Success rate for zh: 3259/9879 = 0.3298916894422512
+    Success rate for ja: 5014/9958 = 0.5035147620004017
+    Success rate for hi: 6884/9994 = 0.6888132879727836
+    Success rate for ar: 6155/9992 = 0.6159927942353883
+    Success rate for ko: 5245/9972 = 0.5259727236261532
+    Success rate for fr: 6886/9988 = 0.6894273127753304
+    Success rate for de: 7361/9992 = 0.736689351481185
+    Success rate for it: 6683/9992 = 0.6688350680544436
+1mil data, 60 epoch (work): 0.647
+    Success rate for en: 7019/9996 = 0.7021808723489396
+    Success rate for ru: 6984/9994 = 0.6988192915749449
+    Success rate for zh: 3597/9879 = 0.3641056787124203
+    Success rate for ja: 5428/9958 = 0.5450893753765816
+    Success rate for hi: 7275/9994 = 0.7279367620572343
+    Success rate for ar: 6464/9992 = 0.6469175340272217
+    Success rate for ko: 5833/9972 = 0.5849378259125552
+    Success rate for fr: 7331/9988 = 0.7339807769323188
+    Success rate for de: 7442/9992 = 0.7447958366693355
+    Success rate for it: 7268/9992 = 0.7273819055244195
 
 TODO:
-- filter space-related wikipedia
-- tune hyperparameters (num layers, epochs)
+- try filter space-related wikipedia, with 10m cap?
+
 
 
 
